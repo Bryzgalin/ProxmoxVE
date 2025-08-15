@@ -45,7 +45,7 @@ msg_ok "Set Up Hardware Acceleration"
 msg_info "Installing Frigate v0.14.1 (Perseverance)"
 cd ~
 mkdir -p /opt/frigate/models
-curl -fsSL "https://github.com/blakeblackshear/frigate/archive/refs/tags/v0.14.1.tar.gz" -o "frigate.tar.gz"
+curl -fsSL "https://github.com/blakeblackshear/frigate/archive/refs/tags/v0.15.2.tar.gz" -o "frigate.tar.gz"
 tar -xzf frigate.tar.gz -C /opt/frigate --strip-components 1
 rm -rf frigate.tar.gz
 cd /opt/frigate
@@ -95,19 +95,17 @@ fi
 echo "tmpfs   /tmp/cache      tmpfs   defaults        0       0" >>/etc/fstab
 msg_ok "Installed Frigate"
 
-if grep -q -o -m1 -E 'avx[^ ]*' /proc/cpuinfo; then
-  msg_ok "AVX Support Detected"
-  msg_info "Installing Openvino Object Detection Model (Resilience)"
-  $STD pip install -r /opt/frigate/docker/main/requirements-ov.txt
-  cd /opt/frigate/models
-  export ENABLE_ANALYTICS=NO
-  $STD /usr/local/bin/omz_downloader --name ssdlite_mobilenet_v2 --num_attempts 2
-  $STD /usr/local/bin/omz_converter --name ssdlite_mobilenet_v2 --precision FP16 --mo /usr/local/bin/mo
-  cd /
-  cp -r /opt/frigate/models/public/ssdlite_mobilenet_v2 openvino-model
-  curl -fsSL "https://github.com/openvinotoolkit/open_model_zoo/raw/master/data/dataset_classes/coco_91cl_bkgr.txt" -o "openvino-model/coco_91cl_bkgr.txt"
-  sed -i 's/truck/car/g' openvino-model/coco_91cl_bkgr.txt
-  cat <<EOF >>/config/config.yml
+msg_info "Installing Openvino Object Detection Model (Resilience)"
+$STD pip install -r /opt/frigate/docker/main/requirements-ov.txt
+cd /opt/frigate/models
+export ENABLE_ANALYTICS=NO
+$STD /usr/local/bin/omz_downloader --name ssdlite_mobilenet_v2 --num_attempts 2
+$STD /usr/local/bin/omz_converter --name ssdlite_mobilenet_v2 --precision FP16 --mo /usr/local/bin/mo
+cd /
+cp -r /opt/frigate/models/public/ssdlite_mobilenet_v2 openvino-model
+curl -fsSL "https://github.com/openvinotoolkit/open_model_zoo/raw/master/data/dataset_classes/coco_91cl_bkgr.txt" -o "openvino-model/coco_91cl_bkgr.txt"
+sed -i 's/truck/car/g' openvino-model/coco_91cl_bkgr.txt
+cat <<EOF >>/config/config.yml
 detectors:
   ov:
     type: openvino
@@ -121,43 +119,9 @@ model:
   input_pixel_format: bgr
   labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 EOF
-  msg_ok "Installed Openvino Object Detection Model"
-else
-  cat <<EOF >>/config/config.yml
-model:
-  path: /cpu_model.tflite
-EOF
-fi
+msg_ok "Installed Openvino Object Detection Model"
 
-msg_info "Installing Coral Object Detection Model (Patience)"
-cd /opt/frigate
-export CCACHE_DIR=/root/.ccache
-export CCACHE_MAXSIZE=2G
-curl -fsSL "https://github.com/libusb/libusb/archive/v1.0.26.zip" -o "v1.0.26.zip"
-$STD unzip v1.0.26.zip
-rm v1.0.26.zip
-cd libusb-1.0.26
-$STD ./bootstrap.sh
-$STD ./configure --disable-udev --enable-shared
-$STD make -j $(nproc --all)
-cd /opt/frigate/libusb-1.0.26/libusb
-mkdir -p /usr/local/lib
-$STD /bin/bash ../libtool --mode=install /usr/bin/install -c libusb-1.0.la '/usr/local/lib'
-mkdir -p /usr/local/include/libusb-1.0
-$STD /usr/bin/install -c -m 644 libusb.h '/usr/local/include/libusb-1.0'
-ldconfig
-cd /
-curl -fsSL "https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite" -o "edgetpu_model.tflite"
-curl -fsSL "https://github.com/google-coral/test_data/raw/release-frogfish/ssdlite_mobiledet_coco_qat_postprocess.tflite" -o "cpu_model.tflite"
-cp /opt/frigate/labelmap.txt /labelmap.txt
-curl -fsSL "https://www.kaggle.com/api/v1/models/google/yamnet/tfLite/classification-tflite/1/download" -o "yamnet-tflite-classification-tflite-v1.tar.gz"
-tar xzf yamnet-tflite-classification-tflite-v1.tar.gz
-rm -rf yamnet-tflite-classification-tflite-v1.tar.gz
-mv 1.tflite cpu_audio_model.tflite
-cp /opt/frigate/audio-labelmap.txt /audio-labelmap.txt
-mkdir -p /media/frigate
-curl -fsSL "https://github.com/intel-iot-devkit/sample-videos/raw/master/person-bicycle-car-detection.mp4" -o "/media/frigate/person-bicycle-car-detection.mp4"
-msg_ok "Installed Coral Object Detection Model"
+
 
 msg_info "Building Nginx with Custom Modules"
 $STD /opt/frigate/docker/main/build_nginx.sh
